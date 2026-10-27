@@ -1766,6 +1766,13 @@ class InfoExtractor:
                         continue
                     else:
                         break
+                elif is_type(e, 'ProfilePage', 'Person'):
+                    info.update(traverse_obj(e['mainEntity'] if is_type(e, 'ProfilePage') else e, {
+                        'uploader': 'name',
+                        'uploader_url': 'url',
+                        'uploader_id': 'alternateName'
+                    }))
+                    break
                 video = e.get('video')
                 if is_type(video, 'VideoObject'):
                     extract_video_object(video)

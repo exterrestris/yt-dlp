@@ -1377,6 +1377,8 @@ from .parti import (
 )
 from .patreon import (
     PatreonCampaignIE,
+    PatreonCustomDomainCampaignIE,
+    PatreonCustomDomainIE,
     PatreonIE,
 )
 from .pbs import (

@@ -700,16 +700,26 @@ class PatreonCampaignIE(PatreonBaseIE):
             if cursor is None:
                 break
 
-    def _real_extract(self, url):
+    def _get_campaign_id_from_url(self, url):
         campaign_id, vanity = self._match_valid_url(url).group('campaign_id', 'vanity')
+
         if campaign_id is None:
-            results = self._call_api('search', vanity, query={
-                'q': vanity,
-                'page[size]': '5',
-            })['data']
-            campaign_id = traverse_obj(results, (
-                lambda _, v: v['type'] == 'campaign-document' and v['attributes']['url'].lower().endswith(f'/{vanity.lower()}'),
-                'id', {trim_str(start='campaign_')}, filter, any, {require('campaign ID')}))
+            return self._get_campaign_id_from_vanity(vanity)
+
+        return campaign_id
+
+    def _get_campaign_id_from_vanity(self, vanity):
+        results = self._call_api('search', vanity, query={
+            'q': vanity,
+            'page[size]': '5',
+        })['data']
+
+        return traverse_obj(results, (
+            lambda _, v: v['type'] == 'campaign-document' and v['attributes']['url'].lower().endswith(f'/{vanity.lower()}'),
+            'id', {trim_str(start='campaign_')}, filter, any, {require('campaign ID')}))
+
+    def _real_extract(self, url):
+        campaign_id = self._get_campaign_id_from_url(url)
 
         params = {
             'json-api-use-default-includes': 'false',
@@ -746,3 +756,73 @@ class PatreonCampaignIE(PatreonBaseIE):
             'age_limit': 18 if traverse_obj(campaign_info, ('attributes', 'is_nsfw')) else 0,
             'thumbnail': url_or_none(traverse_obj(campaign_info, ('attributes', 'avatar_photo_url'))),
         }
+
+
+class PatreonCustomDomainIE(PatreonIE):
+    IE_NAME = 'patreon:custom-domain'
+    _VALID_URL = [
+        r'https?://(?:www\.)?kaiielle\.com/(?:creation\?hid=|(?:[^/?#]+/)?posts/(?:[\w-]+-)?)(?P<id>\d+)',
+    ]
+    _TESTS = [{
+        # YouTube embed on Patreon custom domain
+        'url': 'https://kaiielle.com/posts/ted-lasso-pilot-156611354',
+        'info_dict': {
+            'id': 'uoM14IhAmRI',
+            'description': '',
+            'ext': 'mp4',
+            'title': 'Ted Lasso: Pilot [1x01] | Full-Length Watchalong Reaction',
+            'uploader': 'Watchalongs with KL',
+            'thumbnail': r're:^https?://.*$',
+            'uploader_url': r're:^https?://www.youtube.com/.*$',
+            'channel_url': 'https://www.youtube.com/channel/UC9wLvRHXc8bb9Ac8JTFtGnA',
+            'age_limit': 0,
+            'availability': 'unlisted',
+            'categories': ['Entertainment'],
+            'channel': 'Watchalongs with KL',
+            'channel_follower_count': int,
+            'channel_id': 'UC9wLvRHXc8bb9Ac8JTFtGnA',
+            'duration': 2247,
+            'live_status': 'not_live',
+            'media_type': 'video',
+            'playable_in_embed': True,
+            'tags': [],
+            'timestamp': 1777231698,
+            'upload_date': '20260426',
+            'uploader_id': 'md5:a246c07d187ba3d333dba116f55b8803',
+            'view_count': int,
+        },
+    }]
+
+
+class PatreonCustomDomainCampaignIE(PatreonCampaignIE):
+    IE_NAME = 'patreon:campaign:custom-domain'
+    _VALID_URL = [
+        r'https?://(?:www\.)?kaiielle\.com/(?:/posts)?/?(?:$|[?#])',
+    ]
+    _TESTS = [{
+        'url': 'https://kaiielle.com/',
+        'info_dict': {
+            'title': 'Movies with KL',
+            'channel_url': 'https://kaiielle.com',
+            'id': '5457702',
+            'description': 'md5:780e2bf93206ddbd6556a5552de33f14',
+            'channel_id': '5457702',
+            'channel': 'Movies with KL',
+            'age_limit': 0,
+            'uploader_id': '43600254',
+            'uploader_url': 'https://www.patreon.com/kaiielle',
+            'uploader': 'Movies with KL',
+            'thumbnail': r're:^https?://.*$',
+        },
+        'playlist_mincount': 2000,
+        'params': {
+            'playlistend': 2,
+        },
+    }]
+
+    def _get_campaign_id_from_url(self, url):
+        generic = self._generic_id(url)
+        webpage = self._download_webpage(url, generic, headers={'User-Agent': self.patreon_user_agent})
+        json_ld = self._search_json_ld(webpage, generic, expected_type='ProfilePage')
+
+        return self._get_campaign_id_from_vanity(traverse_obj(json_ld, ('uploader_id', {str})))
