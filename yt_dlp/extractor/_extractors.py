@@ -857,6 +857,7 @@ from .jtbc import (
     JTBCProgramIE,
 )
 from .jwplatform import JWPlatformIE
+from .kaiielle import KaiielleIE
 from .kakao import KakaoIE
 from .kaltura import KalturaIE
 from .kankanews import KankaNewsIE
