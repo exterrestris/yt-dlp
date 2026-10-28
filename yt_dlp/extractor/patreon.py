@@ -761,7 +761,7 @@ class PatreonCampaignIE(PatreonBaseIE):
 class PatreonCustomDomainIE(PatreonIE):
     IE_NAME = 'patreon:custom-domain'
     _VALID_URL = [
-        r'https?://(?:www\.)?kaiielle\.com/(?:creation\?hid=|(?:[^/?#]+/)?posts/(?:[\w-]+-)?)(?P<id>\d+)',
+        r'https?://(?:www\.)?kaiielle\.com/posts/(?:[\w-]+-)?(?P<id>\d+)',
     ]
     _TESTS = [{
         # YouTube embed on Patreon custom domain
@@ -797,7 +797,7 @@ class PatreonCustomDomainIE(PatreonIE):
 class PatreonCustomDomainCampaignIE(PatreonCampaignIE):
     IE_NAME = 'patreon:campaign:custom-domain'
     _VALID_URL = [
-        r'https?://(?:www\.)?kaiielle\.com/(?:/posts)?/?(?:$|[?#])',
+        r'https?://(?:www\.)?kaiielle\.com(?:/posts)?/?(?:$|[?#])',
     ]
     _TESTS = [{
         'url': 'https://kaiielle.com/',
