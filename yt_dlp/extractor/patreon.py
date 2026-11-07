@@ -1,5 +1,7 @@
 import functools
 import itertools
+import re
+import urllib.parse
 
 from .common import InfoExtractor
 from .sproutvideo import VidsIoIE
@@ -17,9 +19,11 @@ from ..utils import (
     parse_iso8601,
     smuggle_url,
     str_or_none,
+    unsmuggle_url,
     update_url_query,
     url_or_none,
     urljoin,
+    variadic,
 )
 from ..utils.traversal import (
     find_elements,
@@ -377,8 +381,11 @@ class PatreonIE(PatreonBaseIE):
 
         return info_dict
 
+    def _get_video_id_from_url(self, url):
+        return self._match_id(url)
+
     def _real_extract(self, url):
-        video_id = self._match_id(url)
+        video_id = self._get_video_id_from_url(url)
         post = self._call_api(
             f'posts/{video_id}', video_id, query={
                 'fields[media]': 'download_url,mimetype,size_bytes,file_name',
@@ -758,11 +765,49 @@ class PatreonCampaignIE(PatreonBaseIE):
         }
 
 
-class PatreonCustomDomainIE(PatreonIE):
+class PatreonBaseCustomDomainIE(PatreonBaseIE):
+    _VALID_URL = False
+    _VALID_URL_PATH = None
+    _IS_CUSTOM_DOMAIN = 'is-custom-domain'
+
+    @classmethod
+    def _get_url_path(cls, url):
+        return urllib.parse.urlunsplit(urllib.parse.urlsplit(url)._replace(scheme='', netloc=''))
+
+    @classmethod
+    def _match_valid_url_path(cls, url):
+        if cls._VALID_URL_PATH is False:
+            return None
+        # This does not use has/getattr intentionally - we want to know whether
+        # we have cached the regexp for *this* class, whereas getattr would also
+        # match the superclass
+        if '_VALID_URL_PATH_RE' not in cls.__dict__:
+            cls._VALID_URL_PATH_RE = tuple(map(re.compile, variadic(cls._VALID_URL_PATH)))
+        return next(filter(None, (regex.match(cls._get_url_path(url)) for regex in cls._VALID_URL_PATH_RE)), None)
+
+    @classmethod
+    def smuggle_custom_domain(cls, url):
+        return smuggle_url(url, {cls._IS_CUSTOM_DOMAIN: True})
+
+    @classmethod
+    def unsmuggle_custom_domain(cls, url):
+        url, smuggled_data = unsmuggle_url(url, default={cls._IS_CUSTOM_DOMAIN: False})
+
+        return (url, smuggled_data[cls._IS_CUSTOM_DOMAIN])
+
+    @classmethod
+    def suitable(cls, url):
+        url, is_custom_domain = cls.unsmuggle_custom_domain(url)
+
+        return super().suitable(url) or (is_custom_domain and cls._match_valid_url_path(url))
+
+
+class PatreonCustomDomainIE(PatreonBaseCustomDomainIE, PatreonIE):
     IE_NAME = 'patreon:custom-domain'
     _VALID_URL = [
         r'https?://(?:www\.)?kaiielle\.com/posts/(?:[\w-]+-)?(?P<id>\d+)',
     ]
+    _VALID_URL_PATH = r'/posts/(?:[\w-]+-)?(?P<id>\d+)'
     _TESTS = [{
         # YouTube embed on Patreon custom domain
         'url': 'https://kaiielle.com/posts/ted-lasso-pilot-156611354',
@@ -793,12 +838,17 @@ class PatreonCustomDomainIE(PatreonIE):
         },
     }]
 
+    def _get_video_id_from_url(self, url):
+        url, _ = self.unsmuggle_custom_domain(url)
+        return self._match_valid_url_path(url).group('id')
 
-class PatreonCustomDomainCampaignIE(PatreonCampaignIE):
+
+class PatreonCustomDomainCampaignIE(PatreonBaseCustomDomainIE, PatreonCampaignIE):
     IE_NAME = 'patreon:campaign:custom-domain'
     _VALID_URL = [
         r'https?://(?:www\.)?kaiielle\.com(?:/posts)?/?(?:$|[?#])',
     ]
+    _VALID_URL_PATH = r'(?:/posts)?/?(?:$|[?#])'
     _TESTS = [{
         'url': 'https://kaiielle.com/',
         'info_dict': {
@@ -821,6 +871,7 @@ class PatreonCustomDomainCampaignIE(PatreonCampaignIE):
     }]
 
     def _get_campaign_id_from_url(self, url):
+        url, _ = self.unsmuggle_custom_domain(url)
         generic = self._generic_id(url)
         webpage = self._download_webpage(url, generic, headers={'User-Agent': self.patreon_user_agent})
         json_ld = self._search_json_ld(webpage, generic, expected_type='ProfilePage')

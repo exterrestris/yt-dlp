@@ -6,6 +6,7 @@ import xml.etree.ElementTree
 
 from .common import InfoExtractor
 from .commonprotocols import RtmpIE
+from .patreon import PatreonCustomDomainCampaignIE, PatreonCustomDomainIE
 from .youtube import YoutubeIE
 from ..compat import compat_etree_fromstring
 from ..cookies import LenientSimpleCookie
@@ -848,6 +849,13 @@ class GenericIE(InfoExtractor):
             if force_videoid:
                 new_url = smuggle_url(new_url, {'force_videoid': force_videoid})
             return self.url_result(new_url)
+
+        if full_response.headers.get('x-patreon-is-custom-domain', '') == 'yes':
+            patreon_url = PatreonCustomDomainIE.smuggle_custom_domain(new_url)
+
+            for ie in [PatreonCustomDomainIE, PatreonCustomDomainCampaignIE]:
+                if ie.suitable(patreon_url):
+                    return self.url_result(patreon_url, ie)
 
         info_dict = {
             'id': video_id,
